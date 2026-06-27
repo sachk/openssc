@@ -53,13 +53,18 @@ static int codec_fill_caps(const struct media_codec *codec, uint32_t flags,
 static int codec_select_config(const struct media_codec *codec, uint32_t flags,
 		const void *caps, size_t caps_size,
 		const struct media_codec_audio_info *info,
-		const struct spa_dict *settings, uint8_t config[A2DP_MAX_CAPS_SIZE],
-		void **config_data)
+		const struct spa_dict *settings, uint8_t config[A2DP_MAX_CAPS_SIZE]
+#if SPA_VERSION_BLUEZ5_CODEC_MEDIA >= 16
+		, void **config_data
+#endif
+		)
 {
 	(void)flags;
 	(void)info;
 	(void)settings;
+#if SPA_VERSION_BLUEZ5_CODEC_MEDIA >= 16
 	(void)config_data;
+#endif
 	struct a2dp_ssc conf;
 
 	if (caps_size < sizeof(conf))
@@ -259,7 +264,9 @@ static void codec_get_delay(void *data, uint32_t *encoder, uint32_t *decoder)
 
 const struct media_codec a2dp_codec_ssc = {
 	.id = SPA_BLUETOOTH_AUDIO_CODEC_SSC,
+#if SPA_VERSION_BLUEZ5_CODEC_MEDIA >= 16
 	.kind = MEDIA_CODEC_A2DP,
+#endif
 	.codec_id = A2DP_CODEC_VENDOR,
 	.vendor = { .vendor_id = SSC_VENDOR_ID, .codec_id = SSC_CODEC_ID },
 	.name = "ssc",
