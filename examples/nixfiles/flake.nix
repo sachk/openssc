@@ -18,6 +18,9 @@
 
             wireplumber = {
               enable = true;
+              package = pkgs.wireplumber.override {
+                pipewire = sscenc.packages.${pkgs.stdenv.hostPlatform.system}.pipewire;
+              };
               extraConfig."80-bluez-ssc" = {
                 "monitor.bluez.properties" = {
                   "bluez5.roles" = [
