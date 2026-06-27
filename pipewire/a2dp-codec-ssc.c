@@ -20,7 +20,11 @@
 
 #define SSC_DEFAULT_BITRATE 192000u
 #ifdef SSCENC_BLOB_HELPER
-#define SSCENC_SPA_FORMAT SPA_AUDIO_FORMAT_S32
+/* Feed the Samsung blob 24-bit samples right-justified in 32-bit containers,
+ * matching the negotiated bits_per_sample=24. (If output is silent/quiet,
+ * the next thing to try is left-justified S32 — i.e. the blob wanting the
+ * 24-bit value in the high bits.) */
+#define SSCENC_SPA_FORMAT SPA_AUDIO_FORMAT_S24_32
 #define SSCENC_SAMPLE_SIZE sizeof(int32_t)
 #else
 #define SSCENC_SPA_FORMAT SPA_AUDIO_FORMAT_S16
