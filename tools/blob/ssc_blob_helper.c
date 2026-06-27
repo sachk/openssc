@@ -133,6 +133,10 @@ int main(int argc, char **argv)
         return 5;
     }
 
+    int32_t ready = 0;
+    if (write_full(STDOUT_FILENO, &ready, sizeof(ready)) < 0)
+        return 9;
+
     for (;;) {
         uint32_t frame_samples = 0;
         int rr = read_full(STDIN_FILENO, &frame_samples, sizeof(frame_samples));

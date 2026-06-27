@@ -191,6 +191,12 @@ static int start_blob(sscenc_encoder *enc)
     enc->blob_in = in_pipe[1];
     enc->blob_out = out_pipe[0];
     enc->blob_pid = pid;
+    int32_t ready = -1;
+    if (read_full(enc->blob_out, &ready, sizeof(ready)) < 0 || ready != 0) {
+        close_blob(enc);
+        return -1;
+    }
+
     return 0;
 
 fail:
