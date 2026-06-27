@@ -18,6 +18,24 @@ super.img*
 lp/
 ext/
 
+
+# Local reverse-engineering artifacts; do not commit blobs, traces, or oracle dumps.
+.re/
+.re/**
+latest_src/
+analysis/
+vectors/
+tables/
+
+# Build outputs
+build/
+result
+result-*
+*.o
+*.a
+*.so
+*.ssc
+*.wav.tmp
 # Temporary tool/package artifacts
 package/
 samfirm-*.tgz

@@ -1,0 +1,324 @@
+/* Experimental Samsung SSC A2DP codec for PipeWire BlueZ5. */
+
+#include <arpa/inet.h>
+#include <errno.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdlib.h>
+
+#include <spa/param/audio/format.h>
+#include <spa/utils/string.h>
+
+#include "rtp.h"
+#include "media-codecs.h"
+#include "ssc/encoder.h"
+
+#define SSC_VENDOR_ID 0x00000075u
+#define SSC_CODEC_ID  0x0103u
+
+#define SSC_SAMPLING_FREQ_48000 0x01u
+#define SSC_SAMPLING_FREQ_44100 0x02u
+
+#define SSC_CHANNEL_MODE_MONO   0x01u
+#define SSC_CHANNEL_MODE_STEREO 0x02u
+
+#define SSC_BITRATE_088K 0x01u
+#define SSC_BITRATE_096K 0x02u
+#define SSC_BITRATE_128K 0x04u
+#define SSC_BITRATE_192K 0x08u
+#define SSC_BITRATE_229K 0x10u
+
+struct __attribute__((packed)) a2dp_ssc {
+	a2dp_vendor_codec_t info;
+	uint8_t frequency;
+	uint8_t channel_mode;
+	uint8_t bitrates;
+};
+
+struct impl {
+	sscenc_encoder *enc;
+	sscenc_config cfg;
+	struct rtp_header *header;
+	struct rtp_payload *payload;
+	size_t block_size;
+};
+
+static const struct media_codec_config ssc_frequencies[] = {
+	{ SSC_SAMPLING_FREQ_48000, 48000, 2 },
+	{ SSC_SAMPLING_FREQ_44100, 44100, 1 },
+};
+
+static const struct media_codec_config ssc_channels[] = {
+	{ SSC_CHANNEL_MODE_STEREO, 2, 2 },
+	{ SSC_CHANNEL_MODE_MONO,   1, 1 },
+};
+
+static const struct media_codec_config ssc_bitrates[] = {
+	{ SSC_BITRATE_229K, 229000, 5 },
+	{ SSC_BITRATE_192K, 192000, 4 },
+	{ SSC_BITRATE_128K, 128000, 3 },
+	{ SSC_BITRATE_096K,  96000, 2 },
+	{ SSC_BITRATE_088K,  88000, 1 },
+};
+
+static int value_for_config(const struct media_codec_config *configs, size_t n, uint32_t config)
+{
+	for (size_t i = 0; i < n; ++i)
+		if (configs[i].config == config)
+			return configs[i].value;
+	return -EINVAL;
+}
+
+static int codec_fill_caps(const struct media_codec *codec, uint32_t flags,
+		const struct spa_dict *settings, uint8_t caps[A2DP_MAX_CAPS_SIZE])
+{
+	static const struct a2dp_ssc a2dp_ssc = {
+		.info.vendor_id = SSC_VENDOR_ID,
+		.info.codec_id = SSC_CODEC_ID,
+		.frequency = SSC_SAMPLING_FREQ_44100 | SSC_SAMPLING_FREQ_48000,
+		.channel_mode = SSC_CHANNEL_MODE_MONO | SSC_CHANNEL_MODE_STEREO,
+		.bitrates = SSC_BITRATE_088K | SSC_BITRATE_096K | SSC_BITRATE_128K |
+			SSC_BITRATE_192K | SSC_BITRATE_229K,
+	};
+
+	if (flags & MEDIA_CODEC_FLAG_SINK)
+		return -ENOTSUP;
+
+	memcpy(caps, &a2dp_ssc, sizeof(a2dp_ssc));
+	return sizeof(a2dp_ssc);
+}
+
+static int codec_select_config(const struct media_codec *codec, uint32_t flags,
+		const void *caps, size_t caps_size,
+		const struct media_codec_audio_info *info,
+		const struct spa_dict *settings, uint8_t config[A2DP_MAX_CAPS_SIZE],
+		void **config_data)
+{
+	struct a2dp_ssc conf;
+	int i;
+
+	if (caps_size < sizeof(conf))
+		return -EINVAL;
+
+	memcpy(&conf, caps, sizeof(conf));
+	if (conf.info.vendor_id != codec->vendor.vendor_id ||
+	    conf.info.codec_id != codec->vendor.codec_id)
+		return -ENOTSUP;
+
+	i = media_codec_select_config(ssc_frequencies, SPA_N_ELEMENTS(ssc_frequencies),
+			conf.frequency, info ? (int)info->rate : A2DP_CODEC_DEFAULT_RATE);
+	if (i < 0)
+		return -ENOTSUP;
+	conf.frequency = (uint8_t)ssc_frequencies[i].config;
+
+	i = media_codec_select_config(ssc_channels, SPA_N_ELEMENTS(ssc_channels),
+			conf.channel_mode, info ? (int)info->channels : A2DP_CODEC_DEFAULT_CHANNELS);
+	if (i < 0)
+		return -ENOTSUP;
+	conf.channel_mode = (uint8_t)ssc_channels[i].config;
+
+	i = media_codec_select_config(ssc_bitrates, SPA_N_ELEMENTS(ssc_bitrates),
+			conf.bitrates, 192000);
+	if (i < 0)
+		return -ENOTSUP;
+	conf.bitrates = (uint8_t)ssc_bitrates[i].config;
+
+	memcpy(config, &conf, sizeof(conf));
+	return sizeof(conf);
+}
+
+static int codec_validate_config(const struct media_codec *codec, uint32_t flags,
+		const void *caps, size_t caps_size, struct spa_audio_info *info)
+{
+	const struct a2dp_ssc *conf = caps;
+	int rate, channels;
+
+	if (caps == NULL || caps_size < sizeof(*conf))
+		return -EINVAL;
+	if (conf->info.vendor_id != codec->vendor.vendor_id ||
+	    conf->info.codec_id != codec->vendor.codec_id)
+		return -EINVAL;
+
+	rate = value_for_config(ssc_frequencies, SPA_N_ELEMENTS(ssc_frequencies), conf->frequency);
+	channels = value_for_config(ssc_channels, SPA_N_ELEMENTS(ssc_channels), conf->channel_mode);
+	if (rate < 0 || channels < 0)
+		return -EINVAL;
+
+	spa_zero(*info);
+	info->media_type = SPA_MEDIA_TYPE_audio;
+	info->media_subtype = SPA_MEDIA_SUBTYPE_raw;
+	info->info.raw.format = SPA_AUDIO_FORMAT_S16;
+	info->info.raw.rate = (uint32_t)rate;
+	info->info.raw.channels = (uint32_t)channels;
+	if (channels == 1) {
+		info->info.raw.position[0] = SPA_AUDIO_CHANNEL_MONO;
+	} else {
+		info->info.raw.position[0] = SPA_AUDIO_CHANNEL_FL;
+		info->info.raw.position[1] = SPA_AUDIO_CHANNEL_FR;
+	}
+	return 0;
+}
+
+static int codec_enum_config(const struct media_codec *codec, uint32_t flags,
+		const void *caps, size_t caps_size, uint32_t id, uint32_t idx,
+		struct spa_pod_builder *b, struct spa_pod **param)
+{
+	struct spa_audio_info info;
+	struct spa_pod_frame f[1];
+	int res;
+
+	if ((res = codec_validate_config(codec, flags, caps, caps_size, &info)) < 0)
+		return res;
+	if (idx > 0)
+		return 0;
+
+	spa_pod_builder_push_object(b, &f[0], SPA_TYPE_OBJECT_Format, id);
+	spa_pod_builder_add(b,
+			SPA_FORMAT_mediaType,      SPA_POD_Id(info.media_type),
+			SPA_FORMAT_mediaSubtype,   SPA_POD_Id(info.media_subtype),
+			SPA_FORMAT_AUDIO_format,   SPA_POD_Id(info.info.raw.format),
+			SPA_FORMAT_AUDIO_rate,     SPA_POD_Int(info.info.raw.rate),
+			SPA_FORMAT_AUDIO_channels, SPA_POD_Int(info.info.raw.channels),
+			SPA_FORMAT_AUDIO_position, SPA_POD_Array(sizeof(uint32_t),
+					SPA_TYPE_Id, info.info.raw.channels, info.info.raw.position),
+			0);
+
+	*param = spa_pod_builder_pop(b, &f[0]);
+	return *param == NULL ? -EIO : 1;
+}
+
+static void *codec_init(const struct media_codec *codec, uint32_t flags,
+		void *config, size_t config_size, const struct spa_audio_info *info,
+		void *props, size_t mtu)
+{
+	struct impl *this;
+	struct a2dp_ssc *conf = config;
+	int rate, channels, bitrate;
+
+	if (config_size < sizeof(*conf) || !info ||
+	    info->media_type != SPA_MEDIA_TYPE_audio ||
+	    info->media_subtype != SPA_MEDIA_SUBTYPE_raw ||
+	    info->info.raw.format != SPA_AUDIO_FORMAT_S16)
+		return NULL;
+
+	rate = value_for_config(ssc_frequencies, SPA_N_ELEMENTS(ssc_frequencies), conf->frequency);
+	channels = value_for_config(ssc_channels, SPA_N_ELEMENTS(ssc_channels), conf->channel_mode);
+	bitrate = value_for_config(ssc_bitrates, SPA_N_ELEMENTS(ssc_bitrates), conf->bitrates);
+	if (rate < 0 || channels < 0 || bitrate < 0)
+		return NULL;
+
+	this = calloc(1, sizeof(*this));
+	if (this == NULL)
+		return NULL;
+	if (sscenc_config_basic(&this->cfg, (uint32_t)rate, (uint8_t)channels, (uint32_t)bitrate) != SSCENC_OK)
+		goto fail;
+	this->enc = sscenc_create(&this->cfg);
+	if (this->enc == NULL)
+		goto fail;
+	this->block_size = SSCENC_FRAME_SAMPLES * (size_t)channels * sizeof(int16_t);
+	return this;
+
+fail:
+	free(this);
+	return NULL;
+}
+
+static void codec_deinit(void *data)
+{
+	struct impl *this = data;
+	sscenc_destroy(this->enc);
+	free(this);
+}
+
+static int codec_get_block_size(void *data)
+{
+	struct impl *this = data;
+	return (int)this->block_size;
+}
+
+static uint64_t codec_get_interval(void *data)
+{
+	struct impl *this = data;
+	return (uint64_t)SSCENC_FRAME_SAMPLES * SPA_NSEC_PER_SEC / this->cfg.sample_rate;
+}
+
+static int codec_abr_process(void *data, size_t unsent)
+{
+	return -ENOTSUP;
+}
+
+static int codec_start_encode(void *data, void *dst, size_t dst_size,
+		uint16_t seqnum, uint32_t timestamp)
+{
+	struct impl *this = data;
+	const size_t header_size = sizeof(struct rtp_header) + sizeof(struct rtp_payload);
+
+	if (dst_size < header_size)
+		return -ENOSPC;
+
+	this->header = (struct rtp_header *)dst;
+	this->payload = SPA_PTROFF(dst, sizeof(struct rtp_header), struct rtp_payload);
+	memset(this->header, 0, header_size);
+	this->payload->frame_count = 0;
+	this->header->v = 2;
+	this->header->pt = 96;
+	this->header->sequence_number = htons(seqnum);
+	this->header->timestamp = htonl(timestamp);
+	this->header->ssrc = htonl(1);
+	return (int)header_size;
+}
+
+static int codec_encode(void *data,
+		const void *src, size_t src_size,
+		void *dst, size_t dst_size,
+		size_t *dst_out, int *need_flush)
+{
+	struct impl *this = data;
+	int res;
+
+	*dst_out = 0;
+	if (src == NULL)
+		return -EINVAL;
+	if (src_size < this->block_size)
+		return 0;
+
+	res = sscenc_encode_s16(this->enc, src, SSCENC_FRAME_SAMPLES, dst, dst_size, dst_out);
+	if (res != SSCENC_OK)
+		return -EINVAL;
+
+	this->payload->frame_count = 1;
+	*need_flush = NEED_FLUSH_ALL;
+	return (int)this->block_size;
+}
+
+static void codec_get_delay(void *data, uint32_t *encoder, uint32_t *decoder)
+{
+	if (encoder)
+		*encoder = 0;
+	if (decoder)
+		*decoder = 0;
+}
+
+const struct media_codec a2dp_codec_ssc = {
+	.id = SPA_BLUETOOTH_AUDIO_CODEC_SSC,
+	.kind = MEDIA_CODEC_A2DP,
+	.codec_id = A2DP_CODEC_VENDOR,
+	.vendor = { .vendor_id = SSC_VENDOR_ID, .codec_id = SSC_CODEC_ID },
+	.name = "ssc",
+	.description = "Samsung SSC (experimental)",
+	.fill_caps = codec_fill_caps,
+	.select_config = codec_select_config,
+	.enum_config = codec_enum_config,
+	.validate_config = codec_validate_config,
+	.init = codec_init,
+	.deinit = codec_deinit,
+	.get_block_size = codec_get_block_size,
+	.get_interval = codec_get_interval,
+	.abr_process = codec_abr_process,
+	.start_encode = codec_start_encode,
+	.encode = codec_encode,
+	.get_delay = codec_get_delay,
+};
+
+MEDIA_CODEC_EXPORT_DEF("ssc", &a2dp_codec_ssc);
