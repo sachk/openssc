@@ -3,11 +3,25 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef SSCENC_BLOB_HELPER
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
+#endif
+
 struct sscenc_encoder {
     sscenc_config cfg;
     uint16_t seq;
     uint8_t flags;
     int32_t pred[SSCENC_MAX_CHANNELS];
+#ifdef SSCENC_BLOB_HELPER
+    int blob_in;
+    int blob_out;
+    pid_t blob_pid;
+#endif
 };
 
 static int basic_bitrate(uint32_t bitrate)
@@ -89,6 +103,111 @@ size_t sscenc_frame_bound(const sscenc_config *cfg, size_t frame_samples)
     return payload + 4u;
 }
 
+#ifdef SSCENC_BLOB_HELPER
+static int write_full(int fd, const void *buf, size_t n)
+{
+    const uint8_t *p = buf;
+    while (n) {
+        ssize_t w = write(fd, p, n);
+        if (w < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        p += (size_t)w;
+        n -= (size_t)w;
+    }
+    return 0;
+}
+
+static int read_full(int fd, void *buf, size_t n)
+{
+    uint8_t *p = buf;
+    while (n) {
+        ssize_t r = read(fd, p, n);
+        if (r == 0)
+            return -1;
+        if (r < 0) {
+            if (errno == EINTR)
+                continue;
+            return -1;
+        }
+        p += (size_t)r;
+        n -= (size_t)r;
+    }
+    return 0;
+}
+
+static void close_blob(sscenc_encoder *enc)
+{
+    if (enc->blob_in >= 0) {
+        close(enc->blob_in);
+        enc->blob_in = -1;
+    }
+    if (enc->blob_out >= 0) {
+        close(enc->blob_out);
+        enc->blob_out = -1;
+    }
+    if (enc->blob_pid > 0) {
+        int status;
+        pid_t pid;
+        do {
+            pid = waitpid(enc->blob_pid, &status, 0);
+        } while (pid < 0 && errno == EINTR);
+        enc->blob_pid = -1;
+    }
+}
+
+static int start_blob(sscenc_encoder *enc)
+{
+    int in_pipe[2] = {-1, -1};
+    int out_pipe[2] = {-1, -1};
+    char rate[16], channels[8], bits[8], bitrate[16];
+
+    snprintf(rate, sizeof(rate), "%u", enc->cfg.sample_rate);
+    snprintf(channels, sizeof(channels), "%u", enc->cfg.channels);
+    snprintf(bits, sizeof(bits), "%u", enc->cfg.bits_per_sample);
+    snprintf(bitrate, sizeof(bitrate), "%u", enc->cfg.bitrate);
+
+    if (pipe(in_pipe) < 0 || pipe(out_pipe) < 0)
+        goto fail;
+
+    pid_t pid = fork();
+    if (pid < 0)
+        goto fail;
+    if (pid == 0) {
+        (void)dup2(in_pipe[0], STDIN_FILENO);
+        (void)dup2(out_pipe[1], STDOUT_FILENO);
+        close(in_pipe[0]);
+        close(in_pipe[1]);
+        close(out_pipe[0]);
+        close(out_pipe[1]);
+        execl(SSCENC_BLOB_HELPER, SSCENC_BLOB_HELPER, rate, channels, bits, bitrate, (char *)NULL);
+        _exit(127);
+    }
+
+    close(in_pipe[0]);
+    close(out_pipe[1]);
+    enc->blob_in = in_pipe[1];
+    enc->blob_out = out_pipe[0];
+    enc->blob_pid = pid;
+    return 0;
+
+fail:
+    if (in_pipe[0] >= 0) close(in_pipe[0]);
+    if (in_pipe[1] >= 0) close(in_pipe[1]);
+    if (out_pipe[0] >= 0) close(out_pipe[0]);
+    if (out_pipe[1] >= 0) close(out_pipe[1]);
+    return -1;
+}
+
+static int restart_blob(sscenc_encoder *enc)
+{
+    close_blob(enc);
+    return start_blob(enc);
+}
+#endif
+
 sscenc_encoder *sscenc_create(const sscenc_config *cfg)
 {
     sscenc_encoder *enc;
@@ -102,11 +221,25 @@ sscenc_encoder *sscenc_create(const sscenc_config *cfg)
 
     enc->cfg = *cfg;
     enc->flags = 1;
+#ifdef SSCENC_BLOB_HELPER
+    enc->blob_in = -1;
+    enc->blob_out = -1;
+    enc->blob_pid = -1;
+    if (start_blob(enc) < 0) {
+        free(enc);
+        return NULL;
+    }
+#endif
     return enc;
 }
 
 void sscenc_destroy(sscenc_encoder *enc)
 {
+    if (!enc)
+        return;
+#ifdef SSCENC_BLOB_HELPER
+    close_blob(enc);
+#endif
     free(enc);
 }
 
@@ -118,6 +251,9 @@ void sscenc_reset(sscenc_encoder *enc)
     enc->flags = 1;
     enc->pred[0] = 0;
     enc->pred[1] = 0;
+#ifdef SSCENC_BLOB_HELPER
+    (void)restart_blob(enc);
+#endif
 }
 
 static void put_nibble(uint8_t *p, size_t idx, uint8_t v)
@@ -201,12 +337,12 @@ static void write_payload(sscenc_encoder *enc, const int16_t *pcm, size_t frames
     }
 }
 
-int sscenc_encode_s16(sscenc_encoder *enc,
-                      const int16_t *pcm,
-                      size_t frame_samples,
-                      uint8_t *out,
-                      size_t out_cap,
-                      size_t *written)
+static int encode_fake_s16(sscenc_encoder *enc,
+                           const int16_t *pcm,
+                           size_t frame_samples,
+                           uint8_t *out,
+                           size_t out_cap,
+                           size_t *written)
 {
     uint8_t hdr;
     size_t frame_len;
@@ -233,4 +369,120 @@ int sscenc_encode_s16(sscenc_encoder *enc,
     if (written)
         *written = frame_len;
     return SSCENC_OK;
+}
+
+#ifdef SSCENC_BLOB_HELPER
+static int drain_blob_frame(sscenc_encoder *enc, size_t n)
+{
+    uint8_t buf[256];
+    while (n) {
+        size_t chunk = n < sizeof(buf) ? n : sizeof(buf);
+        if (read_full(enc->blob_out, buf, chunk) < 0)
+            return -1;
+        n -= chunk;
+    }
+    return 0;
+}
+
+static int encode_blob_s32(sscenc_encoder *enc,
+                           const int32_t *pcm,
+                           size_t frame_samples,
+                           uint8_t *out,
+                           size_t out_cap,
+                           size_t *written)
+{
+    uint32_t frame_count;
+    int32_t ret;
+    size_t pcm_bytes;
+
+    if (written)
+        *written = 0;
+    if (!enc || !pcm || !out || frame_samples == 0 || frame_samples > UINT32_MAX)
+        return SSCENC_EINVAL;
+    if (enc->blob_in < 0 || enc->blob_out < 0)
+        return SSCENC_EINVAL;
+
+    frame_count = (uint32_t)frame_samples;
+    pcm_bytes = frame_samples * (size_t)enc->cfg.channels * sizeof(*pcm);
+    if (write_full(enc->blob_in, &frame_count, sizeof(frame_count)) < 0 ||
+        write_full(enc->blob_in, pcm, pcm_bytes) < 0)
+        return SSCENC_EINVAL;
+    if (read_full(enc->blob_out, &ret, sizeof(ret)) < 0)
+        return SSCENC_EINVAL;
+    if (ret < 0)
+        return SSCENC_EINVAL;
+    if ((size_t)ret > out_cap) {
+        if (drain_blob_frame(enc, (size_t)ret) < 0)
+            return SSCENC_EINVAL;
+        return SSCENC_ENOSPC;
+    }
+    if (ret > 0 && read_full(enc->blob_out, out, (size_t)ret) < 0)
+        return SSCENC_EINVAL;
+
+    if (written)
+        *written = (size_t)ret;
+    return SSCENC_OK;
+}
+#endif
+
+int sscenc_encode_s32(sscenc_encoder *enc,
+                      const int32_t *pcm,
+                      size_t frame_samples,
+                      uint8_t *out,
+                      size_t out_cap,
+                      size_t *written)
+{
+#ifdef SSCENC_BLOB_HELPER
+    return encode_blob_s32(enc, pcm, frame_samples, out, out_cap, written);
+#else
+    int16_t *tmp;
+    size_t total;
+    int ret;
+
+    if (written)
+        *written = 0;
+    if (!enc || !pcm || frame_samples == 0)
+        return SSCENC_EINVAL;
+
+    total = frame_samples * (size_t)enc->cfg.channels;
+    tmp = (int16_t *)malloc(total * sizeof(*tmp));
+    if (!tmp)
+        return SSCENC_ENOMEM;
+    for (size_t i = 0; i < total; ++i)
+        tmp[i] = (int16_t)clamp_i32((int64_t)pcm[i] >> 14, -32768, 32767);
+    ret = encode_fake_s16(enc, tmp, frame_samples, out, out_cap, written);
+    free(tmp);
+    return ret;
+#endif
+}
+
+int sscenc_encode_s16(sscenc_encoder *enc,
+                      const int16_t *pcm,
+                      size_t frame_samples,
+                      uint8_t *out,
+                      size_t out_cap,
+                      size_t *written)
+{
+#ifdef SSCENC_BLOB_HELPER
+    int32_t *tmp;
+    size_t total;
+    int ret;
+
+    if (written)
+        *written = 0;
+    if (!enc || !pcm || frame_samples == 0)
+        return SSCENC_EINVAL;
+
+    total = frame_samples * (size_t)enc->cfg.channels;
+    tmp = (int32_t *)malloc(total * sizeof(*tmp));
+    if (!tmp)
+        return SSCENC_ENOMEM;
+    for (size_t i = 0; i < total; ++i)
+        tmp[i] = (int32_t)pcm[i] << 14;
+    ret = encode_blob_s32(enc, tmp, frame_samples, out, out_cap, written);
+    free(tmp);
+    return ret;
+#else
+    return encode_fake_s16(enc, pcm, frame_samples, out, out_cap, written);
+#endif
 }

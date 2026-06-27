@@ -19,6 +19,14 @@
 #define SSC_CAPABILITIES 0x3eu
 
 #define SSC_DEFAULT_BITRATE 192000u
+#ifdef SSCENC_BLOB_HELPER
+#define SSCENC_SPA_FORMAT SPA_AUDIO_FORMAT_S32
+#define SSCENC_SAMPLE_SIZE sizeof(int32_t)
+#else
+#define SSCENC_SPA_FORMAT SPA_AUDIO_FORMAT_S16
+#define SSCENC_SAMPLE_SIZE sizeof(int16_t)
+#endif
+
 
 struct __attribute__((packed)) a2dp_ssc {
 	a2dp_vendor_codec_t info;
@@ -101,7 +109,7 @@ static int codec_validate_config(const struct media_codec *codec, uint32_t flags
 	spa_zero(*info);
 	info->media_type = SPA_MEDIA_TYPE_audio;
 	info->media_subtype = SPA_MEDIA_SUBTYPE_raw;
-	info->info.raw.format = SPA_AUDIO_FORMAT_S16;
+	info->info.raw.format = SSCENC_SPA_FORMAT;
 	info->info.raw.rate = (uint32_t)rate;
 	info->info.raw.channels = (uint32_t)channels;
 	if (channels == 1) {
@@ -158,7 +166,7 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	    (conf->capabilities & SSC_CAPABILITIES) == 0 ||
 	    info->media_type != SPA_MEDIA_TYPE_audio ||
 	    info->media_subtype != SPA_MEDIA_SUBTYPE_raw ||
-	    info->info.raw.format != SPA_AUDIO_FORMAT_S16)
+	    info->info.raw.format != SSCENC_SPA_FORMAT)
 		return NULL;
 
 	rate = info->info.raw.rate;
@@ -174,7 +182,7 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	this->enc = sscenc_create(&this->cfg);
 	if (this->enc == NULL)
 		goto fail;
-	this->block_size = SSCENC_FRAME_SAMPLES * (size_t)channels * sizeof(int16_t);
+	this->block_size = SSCENC_FRAME_SAMPLES * (size_t)channels * SSCENC_SAMPLE_SIZE;
 	return this;
 
 fail:
@@ -241,7 +249,11 @@ static int codec_encode(void *data,
 	if (src_size < this->block_size)
 		return 0;
 
+#ifdef SSCENC_BLOB_HELPER
+	res = sscenc_encode_s32(this->enc, src, SSCENC_FRAME_SAMPLES, dst, dst_size, dst_out);
+#else
 	res = sscenc_encode_s16(this->enc, src, SSCENC_FRAME_SAMPLES, dst, dst_size, dst_out);
+#endif
 	if (res != SSCENC_OK)
 		return -EINVAL;
 

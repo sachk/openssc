@@ -24,7 +24,7 @@ nix build
 nix run . -- -b 192000 input.wav output.ssc
 ```
 
-The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build that installs an experimental BlueZ5 A2DP codec plugin named `ssc`. There is no `sscenc` service or daemon. PipeWire loads the SPA codec plugin when BlueZ/WirePlumber negotiates an A2DP transport.
+The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build that installs a BlueZ5 A2DP codec plugin named `ssc`. The plugin encodes through the Samsung `libScalable_Encoder.so` under qemu-aarch64 when `SSCENC_BLOB_SO` points at your local phone-extracted blob. There is no always-running `sscenc` service; the helper is spawned only while PipeWire/WirePlumber uses the codec.
 
 Copy-paste NixOS shape:
 
@@ -53,6 +53,12 @@ Copy-paste NixOS shape:
       };
     };
   };
+
+  # Runtime-only; the blob stays outside the Nix store/source tree.
+  # Point this at your local `.re/latest_src/libScalable_Encoder.so`.
+  systemd.user.services.pipewire.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+  systemd.user.services.pipewire-pulse.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+  systemd.user.services.wireplumber.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
 
   environment.systemPackages = [ inputs.sscenc.packages.${pkgs.stdenv.hostPlatform.system}.default ];
 }

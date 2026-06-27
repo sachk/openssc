@@ -49,6 +49,11 @@
             };
           };
 
+          # Runtime-only path to your phone-extracted Samsung blob.
+          systemd.user.services.pipewire.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+          systemd.user.services.pipewire-pulse.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+          systemd.user.services.wireplumber.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+
           environment.systemPackages = [ sscenc.packages.${pkgs.stdenv.hostPlatform.system}.default ];
         })
       ];

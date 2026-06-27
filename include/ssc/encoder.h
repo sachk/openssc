@@ -41,6 +41,12 @@ int sscenc_encode_s16(sscenc_encoder *enc,
                       uint8_t *out,
                       size_t out_cap,
                       size_t *written);
+int sscenc_encode_s32(sscenc_encoder *enc,
+                      const int32_t *pcm,
+                      size_t frame_samples,
+                      uint8_t *out,
+                      size_t out_cap,
+                      size_t *written);
 
 #ifdef __cplusplus
 }

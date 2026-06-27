@@ -36,6 +36,7 @@ result-*
 *.so
 *.ssc
 *.wav.tmp
+*.core
 # Temporary tool/package artifacts
 package/
 samfirm-*.tgz
