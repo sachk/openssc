@@ -65,7 +65,9 @@ int sscenc_config_basic(sscenc_config *cfg, uint32_t sample_rate, uint8_t channe
     cfg->sample_rate = sample_rate;
     cfg->bitrate = bitrate;
     cfg->channels = channels;
-    cfg->bits_per_sample = 16;
+    /* Samsung SSC is encoded at 24-bit depth (the Galaxy phone A2DP stack
+     * negotiates bits_per_sample=24); the blob's encoder init is told the same. */
+    cfg->bits_per_sample = 24;
     return SSCENC_OK;
 }
 
@@ -218,7 +220,7 @@ sscenc_encoder *sscenc_create(const sscenc_config *cfg)
 {
     sscenc_encoder *enc;
 
-    if (!cfg || cfg->bits_per_sample != 16 || (cfg->sample_rate != 44100 && cfg->sample_rate != 48000) || cfg->channels == 0 || cfg->channels > SSCENC_MAX_CHANNELS || !basic_bitrate(cfg->bitrate))
+    if (!cfg || cfg->bits_per_sample != 24 || (cfg->sample_rate != 44100 && cfg->sample_rate != 48000) || cfg->channels == 0 || cfg->channels > SSCENC_MAX_CHANNELS || !basic_bitrate(cfg->bitrate))
         return NULL;
 
     enc = (sscenc_encoder *)calloc(1, sizeof(*enc));
