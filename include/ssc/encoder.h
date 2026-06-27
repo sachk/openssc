@@ -8,7 +8,12 @@
 extern "C" {
 #endif
 
-#define SSCENC_FRAME_SAMPLES 512u
+/* 480 samples/frame = 10 ms at 48 kHz, matching the Galaxy phone's SSC A2DP
+ * feed (dumpstate: "PCM bytes per tick 2880" = 480 * 2ch * 3 bytes, 24-bit).
+ * SSC is CELT-derived, so the decoder assumes a fixed frame size; 480 is a
+ * valid CELT size (4*120) while 512 is not, so 512-sample frames decode to
+ * garbage on the Buds. */
+#define SSCENC_FRAME_SAMPLES 480u
 #define SSCENC_MAX_CHANNELS 2u
 
 typedef enum {
