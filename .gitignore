@@ -1,0 +1,30 @@
+# Original Samsung firmware downloads and decrypted archives
+*.enc4
+*_fac.zip
+SM-*.zip
+AP_*.tar.md5
+BL_*.tar.md5
+CP_*.tar.md5
+CSC_*.tar.md5
+HOME_CSC_*.tar.md5
+USERDATA_*.tar.md5
+
+# Extracted firmware images and partition dumps
+*.img
+*.img.lz4
+*.raw.img
+*.bin.lz4
+super.img*
+lp/
+ext/
+
+# Temporary tool/package artifacts
+package/
+samfirm-*.tgz
+probe.zip
+libScalable_Encoder.Vinche2024.so
+
+# Local/editor noise
+.DS_Store
+*.swp
+*.tmp
