@@ -9,11 +9,11 @@
 static void test_headers(void)
 {
     struct row { uint32_t br; uint8_t h; size_t len; } rows[] = {
-        { 88000, 0xf0, 132 },
-        { 96000, 0xf1, 146 },
-        { 128000, 0xf2, 192 },
-        { 192000, 0xf3, 288 },
-        { 229000, 0xf4, 342 },
+        { 88000, 0xf0, 224 },
+        { 96000, 0xf1, 244 },
+        { 128000, 0xf2, 324 },
+        { 192000, 0xf3, 484 },
+        { 229000, 0xf4, 576 },
     };
 
     for (size_t i = 0; i < sizeof(rows) / sizeof(rows[0]); ++i) {
@@ -32,7 +32,7 @@ static void test_encode(void)
     sscenc_config cfg;
     int16_t silence[SSCENC_FRAME_SAMPLES * 2] = {0};
     int16_t impulse[SSCENC_FRAME_SAMPLES * 2] = {0};
-    uint8_t a[512], b[512], c[512];
+    uint8_t a[640], b[640], c[640];
     size_t an = 0, bn = 0, cn = 0;
 
     impulse[0] = 16384;
@@ -41,16 +41,16 @@ static void test_encode(void)
     assert(enc);
 
     assert(sscenc_encode_s16(enc, silence, SSCENC_FRAME_SAMPLES, a, sizeof(a), &an) == SSCENC_OK);
-    assert(an == 288);
+    assert(an == 484);
     assert(!memcmp(a, "\xff\xee\x01\xf3\xff\xfe", 6));
 
     assert(sscenc_encode_s16(enc, silence, SSCENC_FRAME_SAMPLES, b, sizeof(b), &bn) == SSCENC_OK);
-    assert(bn == 288);
+    assert(bn == 484);
     assert(b[2] == 0x11);
 
     sscenc_reset(enc);
     assert(sscenc_encode_s16(enc, impulse, SSCENC_FRAME_SAMPLES, c, sizeof(c), &cn) == SSCENC_OK);
-    assert(cn == 288);
+    assert(cn == 484);
     assert(!memcmp(c, "\xff\xee\x01\xf3\xff\xfe", 6));
     assert(memcmp(a + 6, c + 6, an - 6) != 0);
 

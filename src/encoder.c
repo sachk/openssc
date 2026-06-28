@@ -88,11 +88,11 @@ size_t sscenc_frame_bound(const sscenc_config *cfg, size_t frame_samples)
     rate = budget_rate(cfg->sample_rate);
     if (rate == 44100 && frame_samples == SSCENC_FRAME_SAMPLES) {
         switch (cfg->bitrate) {
-        case 88000:  return 132;
-        case 96000:  return 146;
-        case 128000: return 192;
-        case 192000: return 288;
-        case 229000: return 342;
+        case 88000:  return 224;
+        case 96000:  return 244;
+        case 128000: return 324;
+        case 192000: return 484;
+        case 229000: return 576;
         default: break;
         }
     }

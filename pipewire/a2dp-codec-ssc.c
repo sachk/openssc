@@ -25,14 +25,15 @@
  *   0x02: UHQ2 / 96 kHz-ish flag
  *
  * Do not advertise 0x02 until the Linux side implements the 96 kHz/UHQ
- * packetizer and frame-header variants. 0x14 is the conservative 48 kHz,
- * 24-bit basic-SSC shape most likely to produce first audio.
+ * packetizer and frame-header variants. S948BXXS3AZF4 selected 0x0c for real
+ * Buds basic SSC: no explicit high-nibble rate, bitrate-limit flag, 24-bit.
  */
-#define SSC_CAP_RATE_MASK   0xf0u
-#define SSC_CAP_RATE_48000  0x10u
-#define SSC_CAP_HIFI_24     0x04u
-#define SSC_CAP_UHQ2        0x02u
-#define SSC_CAP_BASIC_48K   (SSC_CAP_RATE_48000 | SSC_CAP_HIFI_24)
+#define SSC_CAP_RATE_MASK      0xf0u
+#define SSC_CAP_RATE_48000     0x10u
+#define SSC_CAP_BITRATE_LIMIT  0x08u
+#define SSC_CAP_HIFI_24        0x04u
+#define SSC_CAP_UHQ2           0x02u
+#define SSC_CAP_BASIC_48K      (SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)
 
 #define SSC_DEFAULT_BITRATE 192000u
 #ifdef SSCENC_BLOB_HELPER
@@ -101,8 +102,7 @@ static int codec_select_config(const struct media_codec *codec, uint32_t flags,
 	if (conf.info.vendor_id != codec->vendor.vendor_id ||
 	    conf.info.codec_id != codec->vendor.codec_id)
 		return -ENOTSUP;
-	if ((conf.capabilities & SSC_CAP_RATE_48000) == 0 ||
-	    (conf.capabilities & SSC_CAP_HIFI_24) == 0)
+	if ((conf.capabilities & SSC_CAP_HIFI_24) == 0)
 		return -ENOTSUP;
 
 	conf.capabilities = SSC_CAP_BASIC_48K;
@@ -125,8 +125,8 @@ static int codec_validate_config(const struct media_codec *codec, uint32_t flags
 	    conf->info.codec_id != codec->vendor.codec_id)
 		return -EINVAL;
 	if ((conf->capabilities & SSC_CAP_UHQ2) != 0 ||
-	    (conf->capabilities & SSC_CAP_RATE_MASK) != SSC_CAP_RATE_48000 ||
-	    (conf->capabilities & SSC_CAP_HIFI_24) == 0)
+	    (conf->capabilities & SSC_CAP_HIFI_24) == 0 ||
+	    (conf->capabilities & ~(SSC_CAP_RATE_MASK | SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)) != 0)
 		return -EINVAL;
 
 	spa_zero(*info);
@@ -187,8 +187,8 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	    conf->info.vendor_id != codec->vendor.vendor_id ||
 	    conf->info.codec_id != codec->vendor.codec_id ||
 	    (conf->capabilities & SSC_CAP_UHQ2) != 0 ||
-	    (conf->capabilities & SSC_CAP_RATE_MASK) != SSC_CAP_RATE_48000 ||
 	    (conf->capabilities & SSC_CAP_HIFI_24) == 0 ||
+	    (conf->capabilities & ~(SSC_CAP_RATE_MASK | SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)) != 0 ||
 	    info->media_type != SPA_MEDIA_TYPE_audio ||
 	    info->media_subtype != SPA_MEDIA_SUBTYPE_raw ||
 	    info->info.raw.format != SSCENC_SPA_FORMAT)
@@ -256,7 +256,7 @@ static int codec_start_encode(void *data, void *dst, size_t dst_size,
 	this->header->pt = 96;
 	this->header->sequence_number = htons(seqnum);
 	this->header->timestamp = htonl(timestamp);
-	this->header->ssrc = htonl(1);
+	this->header->ssrc = htonl(0xffu);
 	return (int)header_size;
 }
 
