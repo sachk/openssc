@@ -24,9 +24,9 @@
  *   0x04: 24-bit / HiFi-ish flag
  *   0x02: UHQ2 / 96 kHz-ish flag
  *
- * Do not advertise 0x02 until the Linux side implements the 96 kHz/UHQ
- * packetizer and frame-header variants. S948BXXS3AZF4 selected 0x0c for real
- * Buds basic SSC: no explicit high-nibble rate, bitrate-limit flag, 24-bit.
+ * The default profile keeps 0x02 off because the recovered working capture used
+ * 0x0c. Test profiles deliberately advertise 0x02 and/or unsupported bitrates
+ * so Buds behavior can be probed without rebuilding.
  */
 #define SSC_CAP_RATE_MASK      0xf0u
 #define SSC_CAP_RATE_48000     0x10u
@@ -34,8 +34,72 @@
 #define SSC_CAP_HIFI_24        0x04u
 #define SSC_CAP_UHQ2           0x02u
 #define SSC_CAP_BASIC_48K      (SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)
+#define SSC_CAP_UHQ_TEST       (SSC_CAP_BASIC_48K | SSC_CAP_UHQ2)
+#define SSC_PROFILE_ENV        "SSCENC_PROFILE"
 
-#define SSC_DEFAULT_BITRATE 192000u
+struct ssc_profile {
+	const char *name;
+	uint32_t bitrate;
+	uint8_t capabilities;
+};
+
+static const struct ssc_profile ssc_profiles[] = {
+	{ "default",       192000,  SSC_CAP_BASIC_48K },
+	{ "samsung",       192000,  SSC_CAP_BASIC_48K },
+	{ "samsung-basic", 192000,  SSC_CAP_BASIC_48K },
+	{ "samsung-default", 192000, SSC_CAP_BASIC_48K },
+	{ "basic-88",       88000,  SSC_CAP_BASIC_48K },
+	{ "basic-96",       96000,  SSC_CAP_BASIC_48K },
+	{ "basic-128",     128000,  SSC_CAP_BASIC_48K },
+	{ "basic-192",     192000,  SSC_CAP_BASIC_48K },
+	{ "basic-229",     229000,  SSC_CAP_BASIC_48K },
+	{ "basic-256",     256000,  SSC_CAP_BASIC_48K },
+	{ "basic-328",     328000,  SSC_CAP_BASIC_48K },
+	{ "force-high",    328000,  SSC_CAP_BASIC_48K },
+	{ "basic-max",     328000,  SSC_CAP_BASIC_48K },
+	{ "top-basic",     328000,  SSC_CAP_BASIC_48K },
+	{ "uhq-152",       152000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-250",       250000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-291",       291000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-308",       308000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-442",       442000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-584",       584000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-886",       886000,  SSC_CAP_UHQ_TEST },
+	{ "uhq-max",       886000,  SSC_CAP_UHQ_TEST },
+	{ "stress-512",    512000,  SSC_CAP_UHQ_TEST },
+	{ "stress-768",    768000,  SSC_CAP_UHQ_TEST },
+	{ "stress-990",    990000,  SSC_CAP_UHQ_TEST },
+	{ "stress-1200",  1200000,  SSC_CAP_UHQ_TEST },
+	{ "stress-1411",  1411000,  SSC_CAP_UHQ_TEST },
+	{ "stress-2304",  2304000,  SSC_CAP_UHQ_TEST },
+	{ "probably-broken-2304", 2304000, SSC_CAP_UHQ_TEST },
+	{ "stress-3200",  3200000,  SSC_CAP_UHQ_TEST },
+};
+
+static const struct ssc_profile *ssc_profile_current(void)
+{
+	const char *name = getenv(SSC_PROFILE_ENV);
+	size_t i;
+
+	if (name == NULL || name[0] == '\0')
+		name = "default";
+	for (i = 0; i < sizeof(ssc_profiles) / sizeof(ssc_profiles[0]); ++i) {
+		if (spa_streq(name, ssc_profiles[i].name))
+			return &ssc_profiles[i];
+	}
+	return &ssc_profiles[0];
+}
+
+static int ssc_caps_valid_for_profile(uint8_t capabilities, const struct ssc_profile *profile)
+{
+	if ((capabilities & SSC_CAP_HIFI_24) == 0 ||
+	    (capabilities & ~(SSC_CAP_RATE_MASK | SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24 | SSC_CAP_UHQ2)) != 0)
+		return 0;
+	if ((capabilities & SSC_CAP_UHQ2) != 0 &&
+	    (profile->capabilities & SSC_CAP_UHQ2) == 0)
+		return 0;
+	return 1;
+}
 #ifdef SSCENC_BLOB_HELPER
 /* Feed the Samsung blob 24-bit samples right-justified in 32-bit containers,
  * matching the negotiated bits_per_sample=24. (If output is silent/quiet,
@@ -68,10 +132,11 @@ static int codec_fill_caps(const struct media_codec *codec, uint32_t flags,
 	(void)codec;
 	(void)flags;
 	(void)settings;
-	static const struct a2dp_ssc a2dp_ssc = {
+	const struct ssc_profile *profile = ssc_profile_current();
+	const struct a2dp_ssc a2dp_ssc = {
 		.info.vendor_id = SSC_VENDOR_ID,
 		.info.codec_id = SSC_CODEC_ID,
-		.capabilities = SSC_CAP_BASIC_48K,
+		.capabilities = profile->capabilities,
 	};
 
 	memcpy(caps, &a2dp_ssc, sizeof(a2dp_ssc));
@@ -94,6 +159,7 @@ static int codec_select_config(const struct media_codec *codec, uint32_t flags,
 	(void)config_data;
 #endif
 	struct a2dp_ssc conf;
+	const struct ssc_profile *profile = ssc_profile_current();
 
 	if (caps_size < sizeof(conf))
 		return -EINVAL;
@@ -105,7 +171,7 @@ static int codec_select_config(const struct media_codec *codec, uint32_t flags,
 	if ((conf.capabilities & SSC_CAP_HIFI_24) == 0)
 		return -ENOTSUP;
 
-	conf.capabilities = SSC_CAP_BASIC_48K;
+	conf.capabilities = profile->capabilities;
 
 	memcpy(config, &conf, sizeof(conf));
 	return sizeof(conf);
@@ -116,6 +182,7 @@ static int codec_validate_config(const struct media_codec *codec, uint32_t flags
 {
 	(void)flags;
 	const struct a2dp_ssc *conf = caps;
+	const struct ssc_profile *profile = ssc_profile_current();
 	int rate = 48000;
 	int channels = 2;
 
@@ -124,9 +191,7 @@ static int codec_validate_config(const struct media_codec *codec, uint32_t flags
 	if (conf->info.vendor_id != codec->vendor.vendor_id ||
 	    conf->info.codec_id != codec->vendor.codec_id)
 		return -EINVAL;
-	if ((conf->capabilities & SSC_CAP_UHQ2) != 0 ||
-	    (conf->capabilities & SSC_CAP_HIFI_24) == 0 ||
-	    (conf->capabilities & ~(SSC_CAP_RATE_MASK | SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)) != 0)
+	if (!ssc_caps_valid_for_profile(conf->capabilities, profile))
 		return -EINVAL;
 
 	spa_zero(*info);
@@ -182,13 +247,12 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	struct impl *this;
 	struct a2dp_ssc *conf = config;
 	uint32_t rate, channels;
+	const struct ssc_profile *profile = ssc_profile_current();
 
 	if (config_size < sizeof(*conf) || !info ||
 	    conf->info.vendor_id != codec->vendor.vendor_id ||
 	    conf->info.codec_id != codec->vendor.codec_id ||
-	    (conf->capabilities & SSC_CAP_UHQ2) != 0 ||
-	    (conf->capabilities & SSC_CAP_HIFI_24) == 0 ||
-	    (conf->capabilities & ~(SSC_CAP_RATE_MASK | SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)) != 0 ||
+	    !ssc_caps_valid_for_profile(conf->capabilities, profile) ||
 	    info->media_type != SPA_MEDIA_TYPE_audio ||
 	    info->media_subtype != SPA_MEDIA_SUBTYPE_raw ||
 	    info->info.raw.format != SSCENC_SPA_FORMAT)
@@ -202,7 +266,7 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	this = calloc(1, sizeof(*this));
 	if (this == NULL)
 		return NULL;
-	if (sscenc_config_basic(&this->cfg, rate, (uint8_t)channels, SSC_DEFAULT_BITRATE) != SSCENC_OK)
+	if (sscenc_config_basic(&this->cfg, rate, (uint8_t)channels, profile->bitrate) != SSCENC_OK)
 		goto fail;
 	this->enc = sscenc_create(&this->cfg);
 	if (this->enc == NULL)

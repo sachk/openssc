@@ -23,6 +23,7 @@ static void test_headers(void)
         assert(h == rows[i].h);
         assert(sscenc_config_basic(&cfg, 44100, 2, rows[i].br) == SSCENC_OK);
         assert(sscenc_frame_bound(&cfg, SSCENC_FRAME_SAMPLES) == rows[i].len);
+        assert(sscenc_config_basic(&cfg, 48000, 2, rows[i].br) == SSCENC_OK);
     }
     assert(sscenc_header_for_bitrate(250000, NULL) == SSCENC_EINVAL);
 }
@@ -64,6 +65,10 @@ static void test_validation(void)
     assert(sscenc_config_basic(&cfg, 32000, 2, 192000) == SSCENC_EINVAL);
     assert(sscenc_config_basic(&cfg, 44100, 3, 192000) == SSCENC_EINVAL);
     assert(sscenc_config_basic(&cfg, 44100, 2, 250000) == SSCENC_EINVAL);
+    assert(sscenc_config_basic(&cfg, 48000, 2, 256000) == SSCENC_EINVAL);
+    assert(sscenc_config_basic(&cfg, 48000, 2, 328000) == SSCENC_EINVAL);
+    assert(sscenc_config_basic(&cfg, 48000, 2, 584000) == SSCENC_EINVAL);
+    assert(sscenc_config_basic(&cfg, 48000, 2, 2304000) == SSCENC_EINVAL);
 }
 
 int main(void)

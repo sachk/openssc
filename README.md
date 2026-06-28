@@ -40,7 +40,34 @@ nix run . -- -b 192000 input.wav output.ssc
 
 The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build that installs a BlueZ5 A2DP codec plugin named `ssc`. The plugin encodes through the Samsung `libScalable_Encoder.so` under qemu-aarch64 when `SSCENC_BLOB_SO` points at your local phone-extracted blob. There is no always-running `sscenc` service; the helper is spawned only while PipeWire/WirePlumber uses the codec.
 
-Runtime A2DP currently advertises Samsung's basic-SSC capability byte `0x0c` (bitrate-limit flag + 24-bit/HiFi flag) and rejects selected configs that set `0x02` (UHQ2/96 kHz-ish). This mirrors the S948BXXS3AZF4 phone capture against Buds: Samsung selected `0x0c`, then sent one 864-sample / 484-byte `ff ee ... f3` frame directly after each RTP header. `ssc_local-4.btsnoop` showed that adding BlueZ's generic framed-codec RTP payload byte made the Buds produce no audio, so SSC does not use that extra byte on this path.
+Runtime A2DP defaults to Samsung's basic-SSC capability byte `0x0c` (bitrate-limit flag + 24-bit/HiFi flag) and `192000` bps. Set `SSCENC_PROFILE` on PipeWire/WirePlumber to test other forced profiles without rebuilding:
+
+```text
+default, samsung, samsung-basic, samsung-default -> 192000 bps, caps 0x0c
+basic-88                         ->  88000 bps, caps 0x0c
+basic-96                         ->  96000 bps, caps 0x0c
+basic-128                        -> 128000 bps, caps 0x0c
+basic-192                        -> 192000 bps, caps 0x0c
+basic-229                        -> 229000 bps, caps 0x0c
+basic-256                        -> 256000 bps, caps 0x0c
+basic-328, force-high, basic-max, top-basic -> 328000 bps, caps 0x0c
+uhq-152                          -> 152000 bps, caps 0x0e
+uhq-250                          -> 250000 bps, caps 0x0e
+uhq-291                          -> 291000 bps, caps 0x0e
+uhq-308                          -> 308000 bps, caps 0x0e
+uhq-442                          -> 442000 bps, caps 0x0e
+uhq-584                          -> 584000 bps, caps 0x0e
+uhq-886, uhq-max                 -> 886000 bps, caps 0x0e
+stress-512                       -> 512000 bps, caps 0x0e
+stress-768                       -> 768000 bps, caps 0x0e
+stress-990                       -> 990000 bps, caps 0x0e
+stress-1200                      -> 1200000 bps, caps 0x0e
+stress-1411                      -> 1411000 bps, caps 0x0e
+stress-2304, probably-broken-2304 -> 2304000 bps, caps 0x0e
+stress-3200                      -> 3200000 bps, caps 0x0e
+```
+
+The `0x0e` profiles deliberately set the recovered UHQ2/96-kHz-ish bit while still feeding 48 kHz PCM into the current path. They are probe modes, not confirmed Samsung-default behavior. Unknown profile names fall back to `default`.
 
 Copy-paste NixOS shape:
 
@@ -75,6 +102,11 @@ Copy-paste NixOS shape:
   systemd.user.services.pipewire.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
   systemd.user.services.pipewire-pulse.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
   systemd.user.services.wireplumber.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
+
+  # Optional test profile. Omit for Samsung-basic 192 kbps.
+  systemd.user.services.pipewire.environment.SSCENC_PROFILE = "basic-229";
+  systemd.user.services.pipewire-pulse.environment.SSCENC_PROFILE = "basic-229";
+  systemd.user.services.wireplumber.environment.SSCENC_PROFILE = "basic-229";
 
   environment.systemPackages = [ inputs.sscenc.packages.${pkgs.stdenv.hostPlatform.system}.default ];
 }

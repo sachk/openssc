@@ -54,6 +54,11 @@
           systemd.user.services.pipewire-pulse.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
           systemd.user.services.wireplumber.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
 
+          # Optional test profile. Omit for Samsung-basic 192 kbps.
+          systemd.user.services.pipewire.environment.SSCENC_PROFILE = "basic-229";
+          systemd.user.services.pipewire-pulse.environment.SSCENC_PROFILE = "basic-229";
+          systemd.user.services.wireplumber.environment.SSCENC_PROFILE = "basic-229";
+
           environment.systemPackages = [ sscenc.packages.${pkgs.stdenv.hostPlatform.system}.default ];
         })
       ];

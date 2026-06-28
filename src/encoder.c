@@ -24,7 +24,7 @@ struct sscenc_encoder {
 #endif
 };
 
-static int basic_bitrate(uint32_t bitrate)
+static int supported_bitrate(uint32_t bitrate)
 {
     switch (bitrate) {
     case 88000:
@@ -32,6 +32,24 @@ static int basic_bitrate(uint32_t bitrate)
     case 128000:
     case 192000:
     case 229000:
+#ifdef SSCENC_BLOB_HELPER
+    case 152000:
+    case 250000:
+    case 256000:
+    case 291000:
+    case 308000:
+    case 328000:
+    case 442000:
+    case 512000:
+    case 584000:
+    case 768000:
+    case 886000:
+    case 990000:
+    case 1200000:
+    case 1411000:
+    case 2304000:
+    case 3200000:
+#endif
         return 1;
     default:
         return 0;
@@ -59,7 +77,7 @@ int sscenc_header_for_bitrate(uint32_t bitrate, uint8_t *header)
 
 int sscenc_config_basic(sscenc_config *cfg, uint32_t sample_rate, uint8_t channels, uint32_t bitrate)
 {
-    if (!cfg || (sample_rate != 44100 && sample_rate != 48000) || channels == 0 || channels > SSCENC_MAX_CHANNELS || !basic_bitrate(bitrate))
+    if (!cfg || (sample_rate != 44100 && sample_rate != 48000) || channels == 0 || channels > SSCENC_MAX_CHANNELS || !supported_bitrate(bitrate))
         return SSCENC_EINVAL;
 
     cfg->sample_rate = sample_rate;
@@ -220,7 +238,7 @@ sscenc_encoder *sscenc_create(const sscenc_config *cfg)
 {
     sscenc_encoder *enc;
 
-    if (!cfg || cfg->bits_per_sample != 24 || (cfg->sample_rate != 44100 && cfg->sample_rate != 48000) || cfg->channels == 0 || cfg->channels > SSCENC_MAX_CHANNELS || !basic_bitrate(cfg->bitrate))
+    if (!cfg || cfg->bits_per_sample != 24 || (cfg->sample_rate != 44100 && cfg->sample_rate != 48000) || cfg->channels == 0 || cfg->channels > SSCENC_MAX_CHANNELS || !supported_bitrate(cfg->bitrate))
         return NULL;
 
     enc = (sscenc_encoder *)calloc(1, sizeof(*enc));
