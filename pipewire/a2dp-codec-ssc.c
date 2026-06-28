@@ -16,7 +16,23 @@
 
 #define SSC_VENDOR_ID 0x00000075u
 #define SSC_CODEC_ID  0x0103u
-#define SSC_CAPABILITIES 0x3eu
+
+/*
+ * S948BXXS3AZF4 libbluetooth_jni.so parses the post-vendor SSC byte as:
+ *   0xf0: sample-rate/mode high nibble
+ *   0x08: bitrate-limitation flag
+ *   0x04: 24-bit / HiFi-ish flag
+ *   0x02: UHQ2 / 96 kHz-ish flag
+ *
+ * Do not advertise 0x02 until the Linux side implements the 96 kHz/UHQ
+ * packetizer and frame-header variants. 0x14 is the conservative 48 kHz,
+ * 24-bit basic-SSC shape most likely to produce first audio.
+ */
+#define SSC_CAP_RATE_MASK   0xf0u
+#define SSC_CAP_RATE_48000  0x10u
+#define SSC_CAP_HIFI_24     0x04u
+#define SSC_CAP_UHQ2        0x02u
+#define SSC_CAP_BASIC_48K   (SSC_CAP_RATE_48000 | SSC_CAP_HIFI_24)
 
 #define SSC_DEFAULT_BITRATE 192000u
 #ifdef SSCENC_BLOB_HELPER
@@ -54,7 +70,7 @@ static int codec_fill_caps(const struct media_codec *codec, uint32_t flags,
 	static const struct a2dp_ssc a2dp_ssc = {
 		.info.vendor_id = SSC_VENDOR_ID,
 		.info.codec_id = SSC_CODEC_ID,
-		.capabilities = SSC_CAPABILITIES,
+		.capabilities = SSC_CAP_BASIC_48K,
 	};
 
 	memcpy(caps, &a2dp_ssc, sizeof(a2dp_ssc));
@@ -85,10 +101,11 @@ static int codec_select_config(const struct media_codec *codec, uint32_t flags,
 	if (conf.info.vendor_id != codec->vendor.vendor_id ||
 	    conf.info.codec_id != codec->vendor.codec_id)
 		return -ENOTSUP;
-	if ((conf.capabilities & SSC_CAPABILITIES) == 0)
+	if ((conf.capabilities & SSC_CAP_RATE_48000) == 0 ||
+	    (conf.capabilities & SSC_CAP_HIFI_24) == 0)
 		return -ENOTSUP;
 
-	conf.capabilities &= SSC_CAPABILITIES;
+	conf.capabilities = SSC_CAP_BASIC_48K;
 
 	memcpy(config, &conf, sizeof(conf));
 	return sizeof(conf);
@@ -107,7 +124,9 @@ static int codec_validate_config(const struct media_codec *codec, uint32_t flags
 	if (conf->info.vendor_id != codec->vendor.vendor_id ||
 	    conf->info.codec_id != codec->vendor.codec_id)
 		return -EINVAL;
-	if ((conf->capabilities & SSC_CAPABILITIES) == 0)
+	if ((conf->capabilities & SSC_CAP_UHQ2) != 0 ||
+	    (conf->capabilities & SSC_CAP_RATE_MASK) != SSC_CAP_RATE_48000 ||
+	    (conf->capabilities & SSC_CAP_HIFI_24) == 0)
 		return -EINVAL;
 
 	spa_zero(*info);
@@ -167,7 +186,9 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	if (config_size < sizeof(*conf) || !info ||
 	    conf->info.vendor_id != codec->vendor.vendor_id ||
 	    conf->info.codec_id != codec->vendor.codec_id ||
-	    (conf->capabilities & SSC_CAPABILITIES) == 0 ||
+	    (conf->capabilities & SSC_CAP_UHQ2) != 0 ||
+	    (conf->capabilities & SSC_CAP_RATE_MASK) != SSC_CAP_RATE_48000 ||
+	    (conf->capabilities & SSC_CAP_HIFI_24) == 0 ||
 	    info->media_type != SPA_MEDIA_TYPE_audio ||
 	    info->media_subtype != SPA_MEDIA_SUBTYPE_raw ||
 	    info->info.raw.format != SSCENC_SPA_FORMAT)
@@ -175,7 +196,7 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 
 	rate = info->info.raw.rate;
 	channels = info->info.raw.channels;
-	if ((rate != 44100 && rate != 48000) || channels == 0 || channels > 2)
+	if (rate != 48000 || channels == 0 || channels > 2)
 		return NULL;
 
 	this = calloc(1, sizeof(*this));

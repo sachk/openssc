@@ -2,6 +2,20 @@
 
 Clean C implementation work lives at the repo root. Reverse-engineering artifacts and Samsung blobs are local-only under `.re/` and ignored.
 
+## Local Samsung blob bundle
+
+Reverse-engineering source artifacts are under `.re/` and intentionally ignored by Git.
+
+- Encoder blob: `.re/latest_src/libScalable_Encoder.so`
+- Bluetooth codec bundle: `.re/latest_src/lib_bt_bundle.so`
+- Decoder status: `.re/latest_src/MISSING_libScalable_Decoder.txt`
+- Full metadata: `.re/latest_src/metadata.json`
+- Preserved extraction tree for future library lookup: `.re/firmware_extract/`
+
+`libScalable_Decoder.so` was searched across the retained S948BXXS3AZF4 `system`, `vendor`, `product`, `system_ext`, `odm`, and extracted `com.android.bt` APEX library locations. It was not present as a standalone file. Samsung's vendor audio config maps `CODEC_TYPE_SSC` encode/decode to `/vendor/lib64/lib_bt_bundle.so`, so decoder-side code may be bundled there.
+
+Kept extraction locations are library-bearing paths only (`lib`, `lib64`, `apex`, selected build props/configs); original firmware zip/AP/super/partition images were removed.
+
 ## Build
 
 ```sh
@@ -25,6 +39,8 @@ nix run . -- -b 192000 input.wav output.ssc
 ```
 
 The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build that installs a BlueZ5 A2DP codec plugin named `ssc`. The plugin encodes through the Samsung `libScalable_Encoder.so` under qemu-aarch64 when `SSCENC_BLOB_SO` points at your local phone-extracted blob. There is no always-running `sscenc` service; the helper is spawned only while PipeWire/WirePlumber uses the codec.
+
+Runtime A2DP currently advertises only Samsung's conservative basic-SSC capability byte `0x14` (48 kHz + 24-bit/HiFi flag) and rejects selected configs that set `0x02` (UHQ2/96 kHz-ish). This intentionally avoids the previously broader `0x3e` advertisement because the recovered S26 Bluetooth stack treats `0x02` as a different UHQ path while this Linux packetizer still emits 48 kHz / 192 kbps basic frames. If audio is still silent after negotiation, the next highest-value target is `a2dp_vendor_ssc_encode_frames` packetization, not changing the raw encoder entry point.
 
 Copy-paste NixOS shape:
 
