@@ -57,6 +57,7 @@ struct impl {
 	sscenc_encoder *enc;
 	sscenc_config cfg;
 	struct rtp_header *header;
+	struct rtp_payload *payload;
 	size_t block_size;
 };
 
@@ -245,13 +246,15 @@ static int codec_start_encode(void *data, void *dst, size_t dst_size,
 		uint16_t seqnum, uint32_t timestamp)
 {
 	struct impl *this = data;
-	const size_t header_size = sizeof(struct rtp_header);
+	const size_t header_size = sizeof(struct rtp_header) + sizeof(struct rtp_payload);
 
 	if (dst_size < header_size)
 		return -ENOSPC;
 
 	this->header = (struct rtp_header *)dst;
+	this->payload = SPA_PTROFF(dst, sizeof(struct rtp_header), struct rtp_payload);
 	memset(this->header, 0, header_size);
+	this->payload->frame_count = 0;
 	this->header->v = 2;
 	this->header->pt = 96;
 	this->header->sequence_number = htons(seqnum);
@@ -282,6 +285,7 @@ static int codec_encode(void *data,
 	if (res != SSCENC_OK)
 		return -EINVAL;
 
+	this->payload->frame_count++;
 	*need_flush = NEED_FLUSH_ALL;
 	return (int)this->block_size;
 }

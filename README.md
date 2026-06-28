@@ -40,7 +40,7 @@ nix run . -- -b 192000 input.wav output.ssc
 
 The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build that installs a BlueZ5 A2DP codec plugin named `ssc`. The plugin encodes through the Samsung `libScalable_Encoder.so` under qemu-aarch64 when `SSCENC_BLOB_SO` points at your local phone-extracted blob. There is no always-running `sscenc` service; the helper is spawned only while PipeWire/WirePlumber uses the codec.
 
-Runtime A2DP currently advertises only Samsung's conservative basic-SSC capability byte `0x14` (48 kHz + 24-bit/HiFi flag) and rejects selected configs that set `0x02` (UHQ2/96 kHz-ish). This intentionally avoids the previously broader `0x3e` advertisement because the recovered S26 Bluetooth stack treats `0x02` as a different UHQ path while this Linux packetizer still emits 48 kHz / 192 kbps basic frames. If audio is still silent after negotiation, the next highest-value target is `a2dp_vendor_ssc_encode_frames` packetization, not changing the raw encoder entry point.
+Runtime A2DP currently advertises only Samsung's conservative basic-SSC capability byte `0x14` (48 kHz + 24-bit/HiFi flag) and rejects selected configs that set `0x02` (UHQ2/96 kHz-ish). This intentionally avoids the previously broader `0x3e` advertisement because the recovered S26 Bluetooth stack treats `0x02` as a different UHQ path while this Linux packetizer still emits 48 kHz / 192 kbps basic frames. The media packetizer emits PipeWire/BlueZ's RTP payload byte before the Samsung `ff ee ...` SSC frame; without that byte Buds can interpret the first SSC sync byte as a bogus multi-frame/fragment header.
 
 Copy-paste NixOS shape:
 
