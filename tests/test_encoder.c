@@ -58,6 +58,23 @@ static void test_encode(void)
     sscenc_destroy(enc);
 }
 
+static void test_short_frames(void)
+{
+    sscenc_config cfg;
+    sscenc_encoder *enc;
+    int16_t silence[512 * 2] = {0};
+    uint8_t out[320];
+    size_t n = 0;
+
+    assert(sscenc_config_basic(&cfg, 48000, 2, 192000) == SSCENC_OK);
+    enc = sscenc_create(&cfg);
+    assert(enc);
+    assert(sscenc_encode_s16(enc, silence, 512, out, sizeof(out), &n) == SSCENC_OK);
+    assert(n == sscenc_frame_bound(&cfg, 512));
+    assert(!memcmp(out, "\xff\xee\x01\xf3", 4));
+    sscenc_destroy(enc);
+}
+
 static void test_validation(void)
 {
     sscenc_config cfg;
@@ -75,6 +92,7 @@ int main(void)
 {
     test_headers();
     test_encode();
+    test_short_frames();
     test_validation();
     puts("ok");
     return 0;

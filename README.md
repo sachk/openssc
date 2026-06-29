@@ -43,31 +43,48 @@ The flake also exposes `packages.${system}.pipewire`: a patched PipeWire build t
 Runtime A2DP defaults to Samsung's basic-SSC capability byte `0x0c` (bitrate-limit flag + 24-bit/HiFi flag) and `192000` bps. Set `SSCENC_PROFILE` on PipeWire/WirePlumber to test other forced profiles without rebuilding:
 
 ```text
-default, samsung, samsung-basic, samsung-default -> 192000 bps, caps 0x0c
-basic-88                         ->  88000 bps, caps 0x0c
-basic-96                         ->  96000 bps, caps 0x0c
-basic-128                        -> 128000 bps, caps 0x0c
-basic-192                        -> 192000 bps, caps 0x0c
-basic-229                        -> 229000 bps, caps 0x0c
-basic-256                        -> 256000 bps, caps 0x0c
-basic-328, force-high, basic-max, top-basic -> 328000 bps, caps 0x0c
-uhq-152                          -> 152000 bps, caps 0x0e
-uhq-250                          -> 250000 bps, caps 0x0e
-uhq-291                          -> 291000 bps, caps 0x0e
-uhq-308                          -> 308000 bps, caps 0x0e
-uhq-442                          -> 442000 bps, caps 0x0e
-uhq-584                          -> 584000 bps, caps 0x0e
-uhq-886, uhq-max                 -> 886000 bps, caps 0x0e
-stress-512                       -> 512000 bps, caps 0x0e
-stress-768                       -> 768000 bps, caps 0x0e
-stress-990                       -> 990000 bps, caps 0x0e
-stress-1200                      -> 1200000 bps, caps 0x0e
-stress-1411                      -> 1411000 bps, caps 0x0e
-stress-2304, probably-broken-2304 -> 2304000 bps, caps 0x0e
-stress-3200                      -> 3200000 bps, caps 0x0e
+default, samsung, samsung-basic, samsung-default -> 192000 bps, caps 0x0c, 864 frames
+basic-88                         ->  88000 bps, caps 0x0c, 864 frames
+basic-96                         ->  96000 bps, caps 0x0c, 864 frames
+basic-128                        -> 128000 bps, caps 0x0c, 864 frames
+basic-192                        -> 192000 bps, caps 0x0c, 864 frames
+basic-229                        -> 229000 bps, caps 0x0c, 864 frames
+basic-256                        -> 256000 bps, caps 0x0c, 864 frames
+basic-328, force-high, basic-max, top-basic -> 328000 bps, caps 0x0c, 864 frames
+open-basic-229                   -> 229000 bps, caps 0x04, 864 frames
+open-basic-256                   -> 256000 bps, caps 0x04, 864 frames
+open-basic-328                   -> 328000 bps, caps 0x04, 864 frames
+uhq-152                          -> 152000 bps, caps 0x0e, 864 frames
+uhq-250                          -> 250000 bps, caps 0x0e, 864 frames
+uhq-291                          -> 291000 bps, caps 0x0e, 864 frames
+uhq-308                          -> 308000 bps, caps 0x0e, 864 frames
+uhq-442                          -> 442000 bps, caps 0x0e, 864 frames
+uhq-584                          -> 584000 bps, caps 0x0e, 864 frames
+uhq-886, uhq-max                 -> 886000 bps, caps 0x0e, 864 frames
+open-uhq-250                     -> 250000 bps, caps 0x06, 864 frames
+open-uhq-291                     -> 291000 bps, caps 0x06, 864 frames
+open-uhq-308                     -> 308000 bps, caps 0x06, 864 frames
+open-uhq-442                     -> 442000 bps, caps 0x06, 864 frames
+short-basic-192                  -> 192000 bps, caps 0x0c, 512 frames
+short-basic-229                  -> 229000 bps, caps 0x0c, 512 frames
+short-uhq-291                    -> 291000 bps, caps 0x0e, 512 frames
+short-uhq-308                    -> 308000 bps, caps 0x0e, 512 frames
+short-uhq-442                    -> 442000 bps, caps 0x0e, 512 frames
+short-uhq-584                    -> 584000 bps, caps 0x0e, 512 frames
+short-open-uhq-291               -> 291000 bps, caps 0x06, 512 frames
+short-open-uhq-308               -> 308000 bps, caps 0x06, 512 frames
+short-open-uhq-442               -> 442000 bps, caps 0x06, 512 frames
+short-open-uhq-584               -> 584000 bps, caps 0x06, 512 frames
+stress-512                       -> 512000 bps, caps 0x0e, 864 frames
+stress-768                       -> 768000 bps, caps 0x0e, 864 frames
+stress-990                       -> 990000 bps, caps 0x0e, 864 frames
+stress-1200                      -> 1200000 bps, caps 0x0e, 864 frames
+stress-1411                      -> 1411000 bps, caps 0x0e, 864 frames
+stress-2304, probably-broken-2304 -> 2304000 bps, caps 0x0e, 864 frames
+stress-3200                      -> 3200000 bps, caps 0x0e, 864 frames
 ```
 
-The `0x0e` profiles deliberately set the recovered UHQ2/96-kHz-ish bit while still feeding 48 kHz PCM into the current path. They are probe modes, not confirmed Samsung-default behavior. Unknown profile names fall back to `default`.
+The `0x0e` profiles deliberately set the recovered UHQ2/96-kHz-ish bit while still feeding 48 kHz PCM into the current path. The `0x04`/`0x06` `open-*` probes clear the suspected bitrate-limit bit. The `short-*` probes use 512 PCM frames per SSC packet so 442/584 kbps blob frames fit the observed phone media MTU. They are probe modes, not confirmed Samsung-default behavior. Unknown profile names fall back to `default`.
 
 Copy-paste NixOS shape:
 
@@ -104,9 +121,10 @@ Copy-paste NixOS shape:
   systemd.user.services.wireplumber.environment.SSCENC_BLOB_SO = "/home/me/src/ssc/.re/latest_src/libScalable_Encoder.so";
 
   # Optional test profile. Omit for Samsung-basic 192 kbps.
-  systemd.user.services.pipewire.environment.SSCENC_PROFILE = "basic-229";
-  systemd.user.services.pipewire-pulse.environment.SSCENC_PROFILE = "basic-229";
-  systemd.user.services.wireplumber.environment.SSCENC_PROFILE = "basic-229";
+  # Useful next probes: "open-uhq-291", "open-uhq-308", "short-open-uhq-442", "short-open-uhq-584".
+  systemd.user.services.pipewire.environment.SSCENC_PROFILE = "open-uhq-291";
+  systemd.user.services.pipewire-pulse.environment.SSCENC_PROFILE = "open-uhq-291";
+  systemd.user.services.wireplumber.environment.SSCENC_PROFILE = "open-uhq-291";
 
   environment.systemPackages = [ inputs.sscenc.packages.${pkgs.stdenv.hostPlatform.system}.default ];
 }

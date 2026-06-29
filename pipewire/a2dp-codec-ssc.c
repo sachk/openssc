@@ -35,45 +35,65 @@
 #define SSC_CAP_UHQ2           0x02u
 #define SSC_CAP_BASIC_48K      (SSC_CAP_BITRATE_LIMIT | SSC_CAP_HIFI_24)
 #define SSC_CAP_UHQ_TEST       (SSC_CAP_BASIC_48K | SSC_CAP_UHQ2)
+#define SSC_CAP_HIFI_OPEN      SSC_CAP_HIFI_24
+#define SSC_CAP_UHQ_OPEN       (SSC_CAP_HIFI_24 | SSC_CAP_UHQ2)
 #define SSC_PROFILE_ENV        "SSCENC_PROFILE"
 
 struct ssc_profile {
 	const char *name;
 	uint32_t bitrate;
+	uint32_t frame_samples;
 	uint8_t capabilities;
 };
 
 static const struct ssc_profile ssc_profiles[] = {
-	{ "default",       192000,  SSC_CAP_BASIC_48K },
-	{ "samsung",       192000,  SSC_CAP_BASIC_48K },
-	{ "samsung-basic", 192000,  SSC_CAP_BASIC_48K },
-	{ "samsung-default", 192000, SSC_CAP_BASIC_48K },
-	{ "basic-88",       88000,  SSC_CAP_BASIC_48K },
-	{ "basic-96",       96000,  SSC_CAP_BASIC_48K },
-	{ "basic-128",     128000,  SSC_CAP_BASIC_48K },
-	{ "basic-192",     192000,  SSC_CAP_BASIC_48K },
-	{ "basic-229",     229000,  SSC_CAP_BASIC_48K },
-	{ "basic-256",     256000,  SSC_CAP_BASIC_48K },
-	{ "basic-328",     328000,  SSC_CAP_BASIC_48K },
-	{ "force-high",    328000,  SSC_CAP_BASIC_48K },
-	{ "basic-max",     328000,  SSC_CAP_BASIC_48K },
-	{ "top-basic",     328000,  SSC_CAP_BASIC_48K },
-	{ "uhq-152",       152000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-250",       250000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-291",       291000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-308",       308000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-442",       442000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-584",       584000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-886",       886000,  SSC_CAP_UHQ_TEST },
-	{ "uhq-max",       886000,  SSC_CAP_UHQ_TEST },
-	{ "stress-512",    512000,  SSC_CAP_UHQ_TEST },
-	{ "stress-768",    768000,  SSC_CAP_UHQ_TEST },
-	{ "stress-990",    990000,  SSC_CAP_UHQ_TEST },
-	{ "stress-1200",  1200000,  SSC_CAP_UHQ_TEST },
-	{ "stress-1411",  1411000,  SSC_CAP_UHQ_TEST },
-	{ "stress-2304",  2304000,  SSC_CAP_UHQ_TEST },
-	{ "probably-broken-2304", 2304000, SSC_CAP_UHQ_TEST },
-	{ "stress-3200",  3200000,  SSC_CAP_UHQ_TEST },
+	{ "default",       192000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "samsung",       192000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "samsung-basic", 192000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "samsung-default", 192000, SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-88",       88000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-96",       96000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-128",     128000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-192",     192000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-229",     229000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-256",     256000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-328",     328000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "force-high",    328000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "basic-max",     328000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "top-basic",     328000,  SSCENC_FRAME_SAMPLES, SSC_CAP_BASIC_48K },
+	{ "open-basic-229", 229000, SSCENC_FRAME_SAMPLES, SSC_CAP_HIFI_OPEN },
+	{ "open-basic-256", 256000, SSCENC_FRAME_SAMPLES, SSC_CAP_HIFI_OPEN },
+	{ "open-basic-328", 328000, SSCENC_FRAME_SAMPLES, SSC_CAP_HIFI_OPEN },
+	{ "uhq-152",       152000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-250",       250000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-291",       291000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-308",       308000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-442",       442000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-584",       584000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-886",       886000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "uhq-max",       886000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "open-uhq-250",  250000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_OPEN },
+	{ "open-uhq-291",  291000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_OPEN },
+	{ "open-uhq-308",  308000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_OPEN },
+	{ "open-uhq-442",  442000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_OPEN },
+	{ "short-basic-192", 192000, 512, SSC_CAP_BASIC_48K },
+	{ "short-basic-229", 229000, 512, SSC_CAP_BASIC_48K },
+	{ "short-uhq-291", 291000, 512, SSC_CAP_UHQ_TEST },
+	{ "short-uhq-308", 308000, 512, SSC_CAP_UHQ_TEST },
+	{ "short-uhq-442", 442000, 512, SSC_CAP_UHQ_TEST },
+	{ "short-uhq-584", 584000, 512, SSC_CAP_UHQ_TEST },
+	{ "short-open-uhq-291", 291000, 512, SSC_CAP_UHQ_OPEN },
+	{ "short-open-uhq-308", 308000, 512, SSC_CAP_UHQ_OPEN },
+	{ "short-open-uhq-442", 442000, 512, SSC_CAP_UHQ_OPEN },
+	{ "short-open-uhq-584", 584000, 512, SSC_CAP_UHQ_OPEN },
+	{ "stress-512",    512000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-768",    768000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-990",    990000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-1200",  1200000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-1411",  1411000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-2304",  2304000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "probably-broken-2304", 2304000, SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
+	{ "stress-3200",  3200000,  SSCENC_FRAME_SAMPLES, SSC_CAP_UHQ_TEST },
 };
 
 static const struct ssc_profile *ssc_profile_current(void)
@@ -122,6 +142,7 @@ struct impl {
 	sscenc_encoder *enc;
 	sscenc_config cfg;
 	struct rtp_header *header;
+	size_t frame_samples;
 	size_t block_size;
 };
 
@@ -271,7 +292,8 @@ static void *codec_init(const struct media_codec *codec, uint32_t flags,
 	this->enc = sscenc_create(&this->cfg);
 	if (this->enc == NULL)
 		goto fail;
-	this->block_size = SSCENC_FRAME_SAMPLES * (size_t)channels * SSCENC_SAMPLE_SIZE;
+	this->frame_samples = profile->frame_samples;
+	this->block_size = this->frame_samples * (size_t)channels * SSCENC_SAMPLE_SIZE;
 	return this;
 
 fail:
@@ -295,7 +317,7 @@ static int codec_get_block_size(void *data)
 static uint64_t codec_get_interval(void *data)
 {
 	struct impl *this = data;
-	return (uint64_t)SSCENC_FRAME_SAMPLES * SPA_NSEC_PER_SEC / this->cfg.sample_rate;
+	return (uint64_t)this->frame_samples * SPA_NSEC_PER_SEC / this->cfg.sample_rate;
 }
 
 static int codec_abr_process(void *data, size_t unsent)
@@ -339,9 +361,9 @@ static int codec_encode(void *data,
 		return 0;
 
 #ifdef SSCENC_BLOB_HELPER
-	res = sscenc_encode_s32(this->enc, src, SSCENC_FRAME_SAMPLES, dst, dst_size, dst_out);
+	res = sscenc_encode_s32(this->enc, src, this->frame_samples, dst, dst_size, dst_out);
 #else
-	res = sscenc_encode_s16(this->enc, src, SSCENC_FRAME_SAMPLES, dst, dst_size, dst_out);
+	res = sscenc_encode_s16(this->enc, src, this->frame_samples, dst, dst_size, dst_out);
 #endif
 	if (res != SSCENC_OK)
 		return -EINVAL;
